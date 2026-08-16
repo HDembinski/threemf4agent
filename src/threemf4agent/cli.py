@@ -1,10 +1,55 @@
 """threemf — inspect, render, slice, and modify 3MF files from the shell.
 
-Subcommands:
-  inspect  PATH                 list meshes, counts, bbox, unit, warnings
-  render   PATH                 ASCII top-down render, shaded by Z height
-  slice    PATH Z               ASCII horizontal slice at Z (mm, object space)
-  modify   IN OUT               run Python (code from stdin) over the mesh V/T arrays, write OUT
+One command, four subcommands — chain them in the shell:
+
+## `threemf inspect PATH`
+
+List all mesh objects: resource id, name, vertex/triangle counts, bounding box, unit, and reader warnings. Run this first to discover what's in a file.
+
+```console
+$ threemf inspect part.3mf
+unit: Millimeter  meshes: 1
+  #0 id=4 verts=8 tris=12  bbox=[0,0,0]..[50,20,30]  size=50×20×30mm
+outbox: [0,0,0]..[50,20,30]
+```
+
+## `threemf render PATH`
+
+ASCII top-down render (XY plane) of a mesh, shaded by Z height (`low=space, high=@`).
+
+Options:
+
+- `--mesh N` — mesh index (default 0)
+- `--width N` — ASCII width in chars, 10..200 (default 70)
+- `--focus X0,Y0,X1,Y1` — zoom into an XY window in mm
+
+```console
+$ threemf render part.3mf --focus 10,5,30,15
+```
+
+## `threemf slice PATH Z`
+
+ASCII horizontal slice through a mesh at Z height (mm, object space) — `#` = wall. Useful for cross-sections, wall thickness, and infill patterns. Same options as `render`.
+
+```console
+$ threemf slice part.3mf 15
+```
+
+Find the z-range from `threemf inspect` first.
+
+## `threemf modify IN OUT`
+
+Run Python code over a mesh's vertex (`V`, nx3 float) and triangle (`T`, mx3 int) arrays, then save the result as a new 3MF. Code is read from **stdin**. In scope: `V`, `T`, `np`, `trimesh`, `mesh` (lib3mf mesh object), `model` (lib3mf model). Leave the modified arrays under the names `V` and `T`. Other meshes and attachments are preserved.
+
+```console
+$ cat fix.py | threemf modify in.3mf out.3mf
+# one-liner:
+$ echo 'V[:, 2] += 5  # lift 5mm' | threemf modify in.3mf out.3mf
+```
+
+⚠️ This executes arbitrary Python — only run code you trust.
+
+Meshes are read in **object space**; build-item transforms are not applied.
 """
 import argparse
 import os
@@ -85,6 +130,10 @@ def cmd_slice(a) -> None:
     print(r["ascii"])
 
 
+def cmd_help(a) -> None:
+    print(__doc__.strip())
+
+
 def cmd_modify(a) -> None:
     r = backend.cmd_modify(_abs(a.path), _abs(a.out_path, must_exist=False), a.code, mesh=a.mesh)
     print(f"✓ wrote {r['out_path']}")
@@ -98,9 +147,9 @@ def cmd_modify(a) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(
         prog="threemf",
-        description="Inspect, render, slice, and modify 3MF files. Meshes are read in object space.",
+        description="Inspect, render, slice, and modify 3MF files. Run 'threemf help' for the full manual.",
     )
-    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub = ap.add_subparsers(dest="cmd")
 
     p = sub.add_parser("inspect", help="list meshes, counts, bbox, unit, warnings")
     p.add_argument("path", help="path to the .3mf file")
@@ -123,7 +172,13 @@ def main() -> None:
     p.add_argument("--mesh", type=int, default=0, help="mesh index to modify (default 0)")
     p.set_defaults(fn=cmd_modify)
 
+    p = sub.add_parser("help", help="show this help", add_help=False)
+    p.set_defaults(fn=cmd_help)
+
     args = ap.parse_args()
+    if args.cmd is None:
+        cmd_help(args)
+        return
     if args.cmd == "modify":
         if sys.stdin.isatty():
             print("✗ code comes from stdin: cat fix.py | threemf modify in.3mf out.3mf", file=sys.stderr)
