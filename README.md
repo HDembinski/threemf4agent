@@ -41,12 +41,12 @@ Find the z-range from `threemf inspect` first.
 
 ## `threemf modify IN OUT`
 
-Run Python code over a mesh's vertex (`V`, nx3 float) and triangle (`T`, mx3 int) arrays, then save the result as a new 3MF. Code is read from **stdin**; for one-liners pass `--code` instead. In scope: `V`, `T`, `np`, `trimesh`, `mesh` (lib3mf mesh object), `model` (lib3mf model). Leave the modified arrays under the names `V` and `T`. Other meshes and attachments are preserved.
+Run Python code over a mesh's vertex (`V`, nx3 float) and triangle (`T`, mx3 int) arrays, then save the result as a new 3MF. Code is read from **stdin**. In scope: `V`, `T`, `np`, `trimesh`, `mesh` (lib3mf mesh object), `model` (lib3mf model). Leave the modified arrays under the names `V` and `T`. Other meshes and attachments are preserved.
 
 ```console
 $ cat fix.py | threemf modify in.3mf out.3mf
 # one-liner:
-$ threemf modify in.3mf out.3mf --code 'V[:, 2] += 5  # lift 5mm'
+$ echo 'V[:, 2] += 5  # lift 5mm' | threemf modify in.3mf out.3mf
 ```
 
 ⚠️ This executes arbitrary Python — only run code you trust.

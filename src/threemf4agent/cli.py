@@ -4,8 +4,7 @@ Subcommands:
   inspect  PATH                 list meshes, counts, bbox, unit, warnings
   render   PATH                 ASCII top-down render, shaded by Z height
   slice    PATH Z               ASCII horizontal slice at Z (mm, object space)
-  modify   IN OUT [CODE]        run Python over the mesh V/T arrays, write OUT
-                                 (code from stdin by default, or --code for one-liners)
+  modify   IN OUT               run Python (code from stdin) over the mesh V/T arrays, write OUT
 """
 import argparse
 import os
@@ -121,17 +120,13 @@ def main() -> None:
     p = sub.add_parser("modify", help="run Python code over the mesh V/T arrays, save as new 3MF")
     p.add_argument("path", help="input .3mf file")
     p.add_argument("out_path", help="output .3mf file")
-    p.add_argument("--code",
-                   help="Python with V (nx3), T (mx3), np, trimesh, mesh, model in scope; "
-                        "leave modified V and T under those names. "
-                        "Default: read code from stdin. WARNING: executes arbitrary Python.")
     p.add_argument("--mesh", type=int, default=0, help="mesh index to modify (default 0)")
     p.set_defaults(fn=cmd_modify)
 
     args = ap.parse_args()
-    if args.cmd == "modify" and (not args.code or args.code == "-"):
+    if args.cmd == "modify":
         if sys.stdin.isatty():
-            print("✗ no code: pass --code CODE or pipe code on stdin", file=sys.stderr)
+            print("✗ code comes from stdin: cat fix.py | threemf modify in.3mf out.3mf", file=sys.stderr)
             sys.exit(1)
         args.code = sys.stdin.read()
     try:
