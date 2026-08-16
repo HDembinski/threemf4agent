@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "threemf4agent"
+version = "0.1.0"
+description = "threemf: inspect, render, slice, and modify 3MF files from the shell."
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "lib3mf>=2.5",
+    "trimesh>=4",
+]
+
+[project.scripts]
+threemf = "threemf4agent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
