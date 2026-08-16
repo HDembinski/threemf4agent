@@ -44,22 +44,9 @@ def write_mesh_to_model(model, m, V, T):
     m.SetGeometry(pos_list, tri_list)
 
 
-# ── geometry helpers ──────────────────────────────────────────────────────
-
-def _point_in_tri(px, py, x0, y0, x1, y1, x2, y2):
-    d = (y1 - y2) * (x0 - x2) + (x2 - x1) * (y0 - y2)
-    if abs(d) < 1e-12:
-        return False
-    a = ((y1 - y2) * (px - x2) + (x2 - x1) * (py - y2)) / d
-    b = ((y2 - y0) * (px - x2) + (x0 - x2) * (py - y2)) / d
-    c = 1.0 - a - b
-    return a >= 0 and b >= 0 and c >= 0
-
-
 # ── commands ──────────────────────────────────────────────────────────────
 
-def cmd_inspect(args):
-    path = args["path"]
+def cmd_inspect(path):
     model, reader = load_model(path)
     meshes = mesh_objects(model)
     out = {
@@ -83,13 +70,14 @@ def cmd_inspect(args):
             entry["bbox_max"] = [round(float(v), 3) for v in mx]
             entry["size"] = [round(float(mx[k] - mn[k]), 3) for k in range(3)]
         out["meshes"].append(entry)
-    # outbox
+    # outbox (lib3mf leaves ±FLT_MAX when the file has no build)
     try:
         ob = model.GetOutbox()
-        mn = ob.MinCoordinate
-        mx = ob.MaxCoordinate
-        out["outbox_min"] = [round(float(mn[i]), 3) for i in range(3)]
-        out["outbox_max"] = [round(float(mx[i]), 3) for i in range(3)]
+        mn = [float(ob.MinCoordinate[i]) for i in range(3)]
+        mx = [float(ob.MaxCoordinate[i]) for i in range(3)]
+        if max(map(abs, mn + mx)) < 1e37:
+            out["outbox_min"] = [round(v, 3) for v in mn]
+            out["outbox_max"] = [round(v, 3) for v in mx]
     except Exception:
         pass
     wc = reader.GetWarningCount()
@@ -98,44 +86,35 @@ def cmd_inspect(args):
     return out
 
 
-def _pick_mesh(args, model):
+def _pick_mesh(model, idx):
     meshes = mesh_objects(model)
     if not meshes:
         raise ValueError("no mesh objects in file")
-    idx = int(args.get("mesh", 0))
     if idx < 0 or idx >= len(meshes):
         raise ValueError(f"mesh index {idx} out of range (0..{len(meshes)-1})")
     return meshes[idx], idx
 
 
-def cmd_render(args):
-    path = args["path"]
-    width = int(args.get("width", 70))
+def cmd_render(path, mesh=0, width=70, focus=None):
     model, _ = load_model(path)
-    m, idx = _pick_mesh(args, model)
+    m, idx = _pick_mesh(model, mesh)
     V, T = mesh_to_arrays(m)
     if len(V) == 0:
         return {"ascii": "(empty mesh)", "mesh_index": idx}
-    art = render_top(V, T, width, focus=args.get("focus"))
+    art = render_top(V, T, width, focus=focus)
     mn, mx = V.min(axis=0), V.max(axis=0)
     return {
         "mesh_index": idx,
         "view": "top (XY), shaded by height Z",
-        "width": width,
-        "bbox_min": [round(float(v), 3) for v in mn],
-        "bbox_max": [round(float(v), 3) for v in mx],
         "size_mm": [round(float(mx[k] - mn[k]), 3) for k in range(3)],
         "ramp": "low Z -> high Z:  ' .:-=+*#%@",
         "ascii": art,
     }
 
 
-def cmd_slice(args):
-    path = args["path"]
-    z = float(args["z"])
-    width = int(args.get("width", 70))
+def cmd_slice(path, z, mesh=0, width=70, focus=None):
     model, _ = load_model(path)
-    m, idx = _pick_mesh(args, model)
+    m, idx = _pick_mesh(model, mesh)
     V, T = mesh_to_arrays(m)
     if len(V) == 0:
         return {"ascii": "(empty mesh)", "mesh_index": idx}
@@ -143,29 +122,22 @@ def cmd_slice(args):
     if z < float(mn[2]) - 1e-6 or z > float(mx[2]) + 1e-6:
         return {
             "mesh_index": idx,
-            "z": z,
             "ascii": f"(z={z:.3f} outside mesh z-range {mn[2]:.3f}..{mx[2]:.3f})",
             "segment_count": 0,
         }
     segs = slice_segments(V, T, z)
-    art = render_segments(segs, V, width, focus=args.get("focus"))
+    art = render_segments(segs, V, width, focus=focus)
     return {
         "mesh_index": idx,
-        "z": z,
         "view": f"horizontal slice at z={z:.3f} mm (XY plane)",
         "segment_count": len(segs),
-        "bbox_min": [round(float(v), 3) for v in mn],
-        "bbox_max": [round(float(v), 3) for v in mx],
         "ascii": art,
     }
 
 
-def cmd_modify(args):
-    path = args["path"]
-    out_path = args["out_path"]
-    code = args["code"]
+def cmd_modify(path, out_path, code, mesh=0):
     model, _ = load_model(path)
-    m, idx = _pick_mesh(args, model)
+    m, idx = _pick_mesh(model, mesh)
     V, T = mesh_to_arrays(m)
     globs = {
         "V": V.copy(),
@@ -256,18 +228,18 @@ def render_top(V, T, width, focus=None):
         maxy = int(math.ceil(max(py)))
         for gy in range(max(0, miny), min(height, maxy + 1)):
             for gx in range(max(0, minx), min(width, maxx + 1)):
-                if _point_in_tri(gx, gy, px[0], py[0], px[1], py[1], px[2], py[2]):
-                    # barycentric Z
-                    d = (py[1] - py[2]) * (px[0] - px[2]) + (px[2] - px[1]) * (py[0] - py[2])
-                    if abs(d) < 1e-12:
-                        continue
-                    ba = ((py[1] - py[2]) * (gx - px[2]) + (px[2] - px[1]) * (gy - py[2])) / d
-                    bb = ((py[2] - py[0]) * (gx - px[2]) + (px[0] - px[2]) * (gy - py[2])) / d
-                    bc = 1.0 - ba - bb
-                    z = ba * zvals[0] + bb * zvals[1] + bc * zvals[2]
-                    cur = grid[gy][gx]
-                    if cur is None or z > cur:
-                        grid[gy][gx] = z
+                # barycentric: containment test and Z interpolation from one pass
+                d = (py[1] - py[2]) * (px[0] - px[2]) + (px[2] - px[1]) * (py[0] - py[2])
+                if abs(d) < 1e-12:
+                    continue
+                ba = ((py[1] - py[2]) * (gx - px[2]) + (px[2] - px[1]) * (gy - py[2])) / d
+                bb = ((py[2] - py[0]) * (gx - px[2]) + (px[0] - px[2]) * (gy - py[2])) / d
+                if ba < 0 or bb < 0 or ba + bb > 1.0:
+                    continue
+                z = ba * zvals[0] + bb * zvals[1] + (1.0 - ba - bb) * zvals[2]
+                cur = grid[gy][gx]
+                if cur is None or z > cur:
+                    grid[gy][gx] = z
     lines = []
     for gy in range(height - 1, -1, -1):  # +y up
         row = []

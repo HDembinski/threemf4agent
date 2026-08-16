@@ -41,8 +41,14 @@ def _box(mn, mx) -> str:
     return f"[{','.join(str(v) for v in mn)}]..[{','.join(str(v) for v in mx)}]"
 
 
+def _view_opts(p) -> None:
+    p.add_argument("--mesh", type=int, default=0, help="mesh index (default 0)")
+    p.add_argument("--width", type=_width, default=70, help="ASCII width in chars, 10..200 (default 70)")
+    p.add_argument("--focus", type=_focus, metavar="X0,Y0,X1,Y1", help="zoom into an XY window in mm")
+
+
 def cmd_inspect(a) -> None:
-    r = backend.cmd_inspect({"path": _abs(a.path)})
+    r = backend.cmd_inspect(_abs(a.path))
     print(f"📄 {r['file']}")
     print(f"unit: {r['unit']}  meshes: {r['mesh_count']}")
     for m in r["meshes"]:
@@ -65,7 +71,7 @@ def _head(r: dict) -> str:
 
 
 def cmd_render(a) -> None:
-    r = backend.cmd_render({"path": _abs(a.path), "mesh": a.mesh, "width": a.width, "focus": a.focus})
+    r = backend.cmd_render(_abs(a.path), mesh=a.mesh, width=a.width, focus=a.focus)
     print(_head(r))
     if "size_mm" in r:
         print(f"size: {'×'.join(str(v) for v in r['size_mm'])} mm  width: {a.width}")
@@ -75,18 +81,13 @@ def cmd_render(a) -> None:
 
 
 def cmd_slice(a) -> None:
-    r = backend.cmd_slice({"path": _abs(a.path), "z": a.z, "mesh": a.mesh, "width": a.width, "focus": a.focus})
+    r = backend.cmd_slice(_abs(a.path), z=a.z, mesh=a.mesh, width=a.width, focus=a.focus)
     print(_head(r) + (f"  segments: {r['segment_count']}" if "segment_count" in r else ""))
     print(r["ascii"])
 
 
 def cmd_modify(a) -> None:
-    r = backend.cmd_modify({
-        "path": _abs(a.path),
-        "out_path": _abs(a.out_path, must_exist=False),
-        "code": a.code,
-        "mesh": a.mesh,
-    })
+    r = backend.cmd_modify(_abs(a.path), _abs(a.out_path, must_exist=False), a.code, mesh=a.mesh)
     print(f"✓ wrote {r['out_path']}")
     print(f"mesh #{r['mesh_index']}: {r['vertices']} verts, {r['triangles']} tris")
     if r.get("bbox_min"):
@@ -95,7 +96,7 @@ def cmd_modify(a) -> None:
     print(f"verify with: threemf render {r['out_path']}")
 
 
-def main(argv=None) -> None:
+def main() -> None:
     ap = argparse.ArgumentParser(
         prog="threemf",
         description="Inspect, render, slice, and modify 3MF files. Meshes are read in object space.",
@@ -108,17 +109,13 @@ def main(argv=None) -> None:
 
     p = sub.add_parser("render", help="ASCII top-down render (XY), shaded by Z height")
     p.add_argument("path", help="path to the .3mf file")
-    p.add_argument("--mesh", type=int, default=0, help="mesh index (default 0)")
-    p.add_argument("--width", type=_width, default=70, help="ASCII width in chars, 10..200 (default 70)")
-    p.add_argument("--focus", type=_focus, metavar="X0,Y0,X1,Y1", help="zoom into an XY window in mm")
+    _view_opts(p)
     p.set_defaults(fn=cmd_render)
 
     p = sub.add_parser("slice", help="ASCII horizontal slice at Z (XY plane, # = wall)")
     p.add_argument("path", help="path to the .3mf file")
     p.add_argument("z", type=float, help="Z height in mm (object space)")
-    p.add_argument("--mesh", type=int, default=0, help="mesh index (default 0)")
-    p.add_argument("--width", type=_width, default=70, help="ASCII width in chars, 10..200 (default 70)")
-    p.add_argument("--focus", type=_focus, metavar="X0,Y0,X1,Y1", help="zoom into an XY window in mm")
+    _view_opts(p)
     p.set_defaults(fn=cmd_slice)
 
     p = sub.add_parser("modify", help="run Python code over the mesh V/T arrays, save as new 3MF")
@@ -131,7 +128,7 @@ def main(argv=None) -> None:
     p.add_argument("--mesh", type=int, default=0, help="mesh index to modify (default 0)")
     p.set_defaults(fn=cmd_modify)
 
-    args = ap.parse_args(argv)
+    args = ap.parse_args()
     if args.cmd == "modify" and args.code == "-":
         args.code = sys.stdin.read()
     try:
@@ -139,7 +136,3 @@ def main(argv=None) -> None:
     except Exception as e:
         print(f"✗ {e}", file=sys.stderr)
         sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
