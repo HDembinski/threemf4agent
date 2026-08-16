@@ -4,7 +4,8 @@ Subcommands:
   inspect  PATH                 list meshes, counts, bbox, unit, warnings
   render   PATH                 ASCII top-down render, shaded by Z height
   slice    PATH Z               ASCII horizontal slice at Z (mm, object space)
-  modify   IN OUT --code CODE   run Python over the mesh V/T arrays, write OUT
+  modify   IN OUT [CODE]        run Python over the mesh V/T arrays, write OUT
+                                 (code from stdin by default, or --code for one-liners)
 """
 import argparse
 import os
@@ -49,7 +50,6 @@ def _view_opts(p) -> None:
 
 def cmd_inspect(a) -> None:
     r = backend.cmd_inspect(_abs(a.path))
-    print(f"📄 {r['file']}")
     print(f"unit: {r['unit']}  meshes: {r['mesh_count']}")
     for m in r["meshes"]:
         bb = ""
@@ -121,15 +121,18 @@ def main() -> None:
     p = sub.add_parser("modify", help="run Python code over the mesh V/T arrays, save as new 3MF")
     p.add_argument("path", help="input .3mf file")
     p.add_argument("out_path", help="output .3mf file")
-    p.add_argument("--code", required=True,
+    p.add_argument("--code",
                    help="Python with V (nx3), T (mx3), np, trimesh, mesh, model in scope; "
-                        "leave modified V and T under those names. Pass '-' to read from stdin. "
-                        "WARNING: executes arbitrary Python.")
+                        "leave modified V and T under those names. "
+                        "Default: read code from stdin. WARNING: executes arbitrary Python.")
     p.add_argument("--mesh", type=int, default=0, help="mesh index to modify (default 0)")
     p.set_defaults(fn=cmd_modify)
 
     args = ap.parse_args()
-    if args.cmd == "modify" and args.code == "-":
+    if args.cmd == "modify" and (not args.code or args.code == "-"):
+        if sys.stdin.isatty():
+            print("✗ no code: pass --code CODE or pipe code on stdin", file=sys.stderr)
+            sys.exit(1)
         args.code = sys.stdin.read()
     try:
         args.fn(args)

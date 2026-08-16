@@ -50,7 +50,6 @@ def cmd_inspect(path):
     model, reader = load_model(path)
     meshes = mesh_objects(model)
     out = {
-        "file": path,
         "unit": str(model.GetUnit()),
         "mesh_count": len(meshes),
         "meshes": [],
