@@ -47,6 +47,4 @@ $ cat fix.py | threemf modify in.3mf out.3mf
 $ echo 'V[:, 2] += 5  # lift 5mm' | threemf modify in.3mf out.3mf
 ```
 
-⚠️ This executes arbitrary Python — only run code you trust.
-
 Meshes are read in **object space**; build-item transforms are not applied.
