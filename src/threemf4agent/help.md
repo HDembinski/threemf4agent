@@ -15,21 +15,26 @@ outbox: [0,0,0]..[50,20,30]
 
 ## `threemf render PATH`
 
-ASCII top-down render (XY plane) of a mesh, shaded by Z height (`low=space, high=@`).
+ASCII render of a mesh from a camera angle, shaded by world height Z (`low=space, high=@`).
 
 Options:
 
 - `--mesh N` — mesh index (default 0)
 - `--width N` — ASCII width in chars, 10..200 (default 70)
-- `--focus X0,Y0,X1,Y1` — zoom into an XY window in mm
+- `--focus X0,Y0,X1,Y1` — zoom into a window in mm (screen plane)
+- `--elev DEG` — camera elevation: 90=top view (default), 0=side view, 30=3/4 view
+- `--azim DEG` — camera azimuth (turntable around Z) in degrees (default 0)
+
+Note: the ASCII is a max-value-per-cell projection — thin features that pass through a cell make that cell "inked" at their highest point, so sparse/curved geometry can look more solid in ASCII than it is. The PNG is a true z-buffer projection of the mesh (shaded by height Z), printed as `png: <path>` after the ASCII, rendered from the mesh, not from the ASCII.
 
 ```console
+$ threemf render part.3mf --elev 30 --azim 45
 $ threemf render part.3mf --focus 10,5,30,15
 ```
 
 ## `threemf slice PATH Z`
 
-ASCII horizontal slice through a mesh at Z height (mm, object space) — `#` = wall. Useful for cross-sections, wall thickness, and infill patterns. Same options as `render`.
+ASCII horizontal slice through a mesh at Z height (mm, object space) — `#` = wall. Useful for cross-sections, wall thickness, and infill patterns. Same options as `render`. The PNG is a full-resolution cross-section: the actual intersection segments rasterized (antialiased), not the ASCII — printed as `png: <path>`.
 
 ```console
 $ threemf slice part.3mf 15

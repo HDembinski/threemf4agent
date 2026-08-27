@@ -67,19 +67,23 @@ def _head(r: dict) -> str:
 
 
 def cmd_render(a) -> None:
-    r = backend.cmd_render(_abs(a.path), mesh=a.mesh, width=a.width, focus=a.focus)
+    r = backend.cmd_render(_abs(a.path), mesh=a.mesh, width=a.width, focus=a.focus, elev=a.elev, azim=a.azim)
     print(_head(r))
     if "size_mm" in r:
         print(f"size: {'×'.join(str(v) for v in r['size_mm'])} mm  width: {a.width}")
         print(f"shading: {r['ramp']}")
         print()
     print(r["ascii"])
+    if r.get("png"):
+        print(f"png: {r['png']}")
 
 
 def cmd_slice(a) -> None:
     r = backend.cmd_slice(_abs(a.path), z=a.z, mesh=a.mesh, width=a.width, focus=a.focus)
     print(_head(r) + (f"  segments: {r['segment_count']}" if "segment_count" in r else ""))
     print(r["ascii"])
+    if r.get("png"):
+        print(f"png: {r['png']}")
 
 
 def cmd_help(a) -> None:
@@ -107,9 +111,13 @@ def main() -> None:
     p.add_argument("path", help="path to the .3mf file")
     p.set_defaults(fn=cmd_inspect)
 
-    p = sub.add_parser("render", help="ASCII top-down render (XY), shaded by Z height")
+    p = sub.add_parser("render", help="ASCII render from a camera angle, shaded by height Z")
     p.add_argument("path", help="path to the .3mf file")
     _view_opts(p)
+    p.add_argument("--elev", type=float, default=90.0, metavar="DEG",
+                   help="camera elevation in degrees: 90=top (default), 0=side")
+    p.add_argument("--azim", type=float, default=0.0, metavar="DEG",
+                   help="camera azimuth (turntable around Z) in degrees (default 0)")
     p.set_defaults(fn=cmd_render)
 
     p = sub.add_parser("slice", help="ASCII horizontal slice at Z (XY plane, # = wall)")
